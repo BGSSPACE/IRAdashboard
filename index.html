@@ -167,6 +167,15 @@ th.sort-desc .sort-arrow::after { content:" ▼"; opacity:1; }
 .spin { animation:spin 0.8s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
 
+/* PAGINATION */
+.pag-bar { display:flex; align-items:center; justify-content:space-between; padding:14px 22px; border-top:1px solid var(--border); flex-wrap:wrap; gap:10px; }
+.pag-info { font-size:12px; color:var(--muted); }
+.pag-btns { display:flex; align-items:center; gap:6px; }
+.pag-btn { padding:6px 12px; border:1px solid var(--border-2); border-radius:6px; font-size:12px; font-weight:600; color:var(--text-2); background:var(--white); cursor:pointer; transition:all 0.15s; min-width:34px; text-align:center; }
+.pag-btn:hover:not(:disabled) { border-color:var(--red); color:var(--red); }
+.pag-btn.active { background:var(--grad); color:#fff; border:none; }
+.pag-btn:disabled { opacity:0.35; cursor:not-allowed; }
+
 /* COMMISSION */
 .send-btn { padding:6px 12px; background:var(--grad); color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:600; white-space:nowrap; transition:filter 0.15s; }
 .send-btn:hover { filter:brightness(1.06); }
@@ -397,7 +406,7 @@ th.sort-desc .sort-arrow::after { content:" ▼"; opacity:1; }
           <span class="table-count" id="comm-count">—</span>
           <span class="muted" id="comm-rate-note"></span>
         </div>
-        <input class="t-search no-pdf" type="text" id="comm-search" placeholder="Search nama / kode..." oninput="renderCommission()">
+        <input class="t-search no-pdf" type="text" id="comm-search" placeholder="Search nama / kode..." oninput="commPage=1;renderCommission()">
       </div>
       <div class="table-scroll" id="comm-body"><div class="loading-row">Loading...</div></div>
     </div>
@@ -408,13 +417,13 @@ th.sort-desc .sort-arrow::after { content:" ▼"; opacity:1; }
 
 <script>
 var CFG = {
-  ADMIN_PASSWORD : "admin123",
-  SCRIPT_URL     : "https://script.google.com/macros/s/AKfycbx2nC7Ic8OP7vTBqaH2HwQLMF5pEp3DfGnAqamm440_BTYyVfO0rARnzrmkclTVPc6GZg/exec",
+  ADMIN_PASSWORD : "IRAWC2026",
+  SCRIPT_URL     : "https://script.google.com/macros/s/AKfycbx2GYT4IifWEqgIAmzRuA5_-pj8MqXY3zFZP_zal84W2KXXtFsqSemPH8qnSc40CbGt/exec",
   LOGO_URL       : "https://bgsspace.github.io/dashboardIRA/logo.png",
   GFORM_URL      : "https://docs.google.com/forms/d/e/1FAIpQLSdAJ_3H87EEsyLlV5UBWv1MTMHxZ5JilhtqW-HwRYNYvsg5zA/viewform",
   COMMISSION_PER : 30000,
   TARGET_P       : 5000000,
-  TARGET_R       : 500000000000,
+  TARGET_R       : 0,
   REFRESH_MIN    : 15,
   SHEETS: [
     { name: "Homeless", tab: "Homeless" },
@@ -425,7 +434,7 @@ var CFG = {
   DETAIL_COLS: [
     { key:"wilayah",          label:"Region",        type:"text"    },
     { key:"_source",          label:"Channel",       type:"channel" },
-    { key:"referral_code",    label:"Unique Code",      type:"code"    },
+    { key:"referral_code",    label:"Unique Code",   type:"code"    },
     { key:"link",             label:"Link Post",     type:"linkbtn", btn:"Buka" },
     { key:"media_name",       label:"Media Name",    type:"text"    },
     { key:"jumlah_pendaftar", label:"Registrations", type:"num"     },
@@ -450,6 +459,9 @@ function sheetNameMap(){ var nm={}; CFG.SHEETS.forEach(function(x){ nm[x.tab]=x.
 
 var currentRole="", currentCode="", refreshTimer=null;
 var allData=[], commission=[], commByCode={}, trendChart=null, donutChart=null;
+var sortCol="jumlah_pendaftar", sortDir="desc";
+var tablePage=1, commPage=1;
+var PAGE_SIZE=10;
 
 window.addEventListener("load", function(){
   document.getElementById("login-logo").src=CFG.LOGO_URL;
@@ -561,6 +573,7 @@ function normDateISO(v){
 
 function clearDates(){ document.getElementById("date-from").value=""; document.getElementById("date-to").value=""; applyAll(); }
 function applyAll(){
+  tablePage=1;
   var d=getFilteredData();
   renderKPI(d); renderTrend(d);
   renderRank("rank-channel","_source",true,d);
@@ -692,7 +705,6 @@ function renderConversionTable(d){
 }
 function dash(){ return '<span style="color:var(--muted)">—</span>'; }
 
-var sortCol="jumlah_pendaftar", sortDir="desc";
 function colType(cols,key){ for(var i=0;i<cols.length;i++) if(cols[i].key===key) return cols[i].type; return "text"; }
 function cellHtml(col,r){
   var v=r[col.key];
@@ -715,26 +727,78 @@ function buildTable(rows,cols,sortable){
   rows.forEach(function(r){ html+='<tr>'; cols.forEach(function(col){ html+=cellHtml(col,r); }); html+='</tr>'; });
   return html+'</tbody></table>';
 }
+
+function buildPag(cur,total,rowCount,start,end,fn){
+  if(total<=1) return '';
+  var html='<div class="pag-bar"><div class="pag-info">Showing '+(start+1)+'–'+end+' of '+fmtNum(rowCount)+'</div><div class="pag-btns">';
+  html+='<button class="pag-btn" onclick="'+fn+'('+Math.max(1,cur-1)+')" '+(cur===1?'disabled':'')+'>&#8592;</button>';
+  var lo=Math.max(1,cur-2), hi=Math.min(total,cur+2);
+  if(lo>1){ html+='<button class="pag-btn" onclick="'+fn+'(1)">1</button>'; if(lo>2) html+='<span class="pag-info" style="padding:0 2px;">…</span>'; }
+  for(var i=lo;i<=hi;i++){
+    html+='<button class="pag-btn'+(i===cur?' active':'')+'" onclick="'+fn+'('+i+')">'+i+'</button>';
+  }
+  if(hi<total){ if(hi<total-1) html+='<span class="pag-info" style="padding:0 2px;">…</span>'; html+='<button class="pag-btn" onclick="'+fn+'('+total+')">'+total+'</button>'; }
+  html+='<button class="pag-btn" onclick="'+fn+'('+(Math.min(total,cur+1))+')" '+(cur===total?'disabled':'')+'>&#8594;</button>';
+  html+='</div></div>';
+  return html;
+}
+
 function renderTable(d){
-  document.getElementById("tbl-count").textContent=fmtNum(d.length)+" rows";
-  if(!d.length){ document.getElementById("tbl-body").innerHTML='<div class="empty-state"><div class="empty-icon">&#128202;</div><div>No matching data</div></div>'; return; }
   var cols=CFG.DETAIL_COLS;
   var isNumType=function(k){ var t=colType(cols,k); return t==="num"||t==="rp"; };
-  var sorted=d.slice().sort(function(a,b){ var n=isNumType(sortCol); var av=n?num(a[sortCol]):String(a[sortCol]||"").toLowerCase(); var bv=n?num(b[sortCol]):String(b[sortCol]||"").toLowerCase(); if(av<bv) return sortDir==="asc"?-1:1; if(av>bv) return sortDir==="asc"?1:-1; return 0; });
-  document.getElementById("tbl-body").innerHTML=buildTable(sorted,cols,true);
+  var sorted=d.slice().sort(function(a,b){
+    var n=isNumType(sortCol);
+    var av=n?num(a[sortCol]):String(a[sortCol]||"").toLowerCase();
+    var bv=n?num(b[sortCol]):String(b[sortCol]||"").toLowerCase();
+    if(av<bv) return sortDir==="asc"?-1:1;
+    if(av>bv) return sortDir==="asc"?1:-1;
+    return 0;
+  });
+  var total=sorted.length;
+  var totalPages=Math.max(1,Math.ceil(total/PAGE_SIZE));
+  if(tablePage>totalPages) tablePage=1;
+  var start=(tablePage-1)*PAGE_SIZE, end=Math.min(start+PAGE_SIZE,total);
+  var paged=sorted.slice(start,end);
+
+  document.getElementById("tbl-count").textContent=fmtNum(total)+" rows";
+  if(!total){
+    document.getElementById("tbl-body").innerHTML='<div class="empty-state"><div class="empty-icon">&#128202;</div><div>No matching data</div></div>';
+    return;
+  }
+  document.getElementById("tbl-body").innerHTML=buildTable(paged,cols,true)+buildPag(tablePage,totalPages,total,start,end,"gotoTable");
 }
-function doSort(col){ if(sortCol===col) sortDir=sortDir==="asc"?"desc":"asc"; else { sortCol=col; sortDir="desc"; } renderTable(getFilteredData()); }
+function doSort(col){
+  if(sortCol===col) sortDir=sortDir==="asc"?"desc":"asc";
+  else { sortCol=col; sortDir="desc"; }
+  tablePage=1;
+  renderTable(getFilteredData());
+}
+function gotoTable(p){ tablePage=p; renderTable(getFilteredData()); }
 
 function renderCommission(){
   var note=document.getElementById("comm-rate-note"); if(note) note.textContent="Rp"+Number(CFG.COMMISSION_PER).toLocaleString("id-ID")+" / pendaftar";
   var q=(document.getElementById("comm-search")||{}).value; q=(q||"").toLowerCase();
   var rows=commission.filter(function(c){ return !q || String(c.name||"").toLowerCase().includes(q) || String(c.referral_code||"").toLowerCase().includes(q); });
-  document.getElementById("comm-count").textContent=fmtNum(rows.length)+" mitra";
-  if(!commission.length){ document.getElementById("comm-body").innerHTML='<div class="empty-state"><div class="empty-icon">&#128176;</div><div>Belum ada data.</div></div>'; return; }
-  if(!rows.length){ document.getElementById("comm-body").innerHTML='<div class="empty-state"><div>Tidak ada yang cocok.</div></div>'; return; }
   rows.sort(function(a,b){ return num(b.commission)-num(a.commission); });
-  document.getElementById("comm-body").innerHTML=buildTable(rows,CFG.COMMISSION_COLS,false);
+
+  var total=rows.length;
+  var totalPages=Math.max(1,Math.ceil(total/PAGE_SIZE));
+  if(commPage>totalPages) commPage=1;
+  var start=(commPage-1)*PAGE_SIZE, end=Math.min(start+PAGE_SIZE,total);
+  var paged=rows.slice(start,end);
+
+  document.getElementById("comm-count").textContent=fmtNum(total)+" mitra";
+  if(!commission.length){
+    document.getElementById("comm-body").innerHTML='<div class="empty-state"><div class="empty-icon">&#128176;</div><div>Belum ada data.</div></div>';
+    return;
+  }
+  if(!rows.length){
+    document.getElementById("comm-body").innerHTML='<div class="empty-state"><div>Tidak ada yang cocok.</div></div>';
+    return;
+  }
+  document.getElementById("comm-body").innerHTML=buildTable(paged,CFG.COMMISSION_COLS,false)+buildPag(commPage,totalPages,total,start,end,"gotoComm");
 }
+function gotoComm(p){ commPage=p; renderCommission(); }
 
 function renderPartner(){
   var c=commByCode[currentCode]||{};
