@@ -728,7 +728,7 @@ function renderConversionTable(d){
 function dash(){ return '<span style="color:var(--muted)">—</span>'; }
 
 // ============================================================
-//  PAGINATION HELPER
+//  PAGINATION HELPER  (FIXED)
 // ============================================================
 function buildPagination(containerId, currentPage, totalRows, pageSize, onPageChange) {
   var container = document.getElementById(containerId);
@@ -740,32 +740,49 @@ function buildPagination(containerId, currentPage, totalRows, pageSize, onPageCh
   var from = (currentPage - 1) * pageSize + 1;
   var to   = Math.min(currentPage * pageSize, totalRows);
 
-  function pageButtons() {
-    var btns = [];
-    var delta = 2;
-    var range = [];
-    for (var i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) {
-      range.push(i);
-    }
-    var pages = [1].concat(range).concat(totalPages > 1 ? [totalPages] : []);
-    pages = pages.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort(function(a,b){return a-b;});
+  var delta = 2, range = [];
+  for (var i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) range.push(i);
+  var pages = [1].concat(range);
+  if (totalPages > 1) pages.push(totalPages);
+  pages = pages.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort(function(a,b){ return a-b; });
 
-    var prev = 0;
-    pages.forEach(function(p) {
-      if (prev && p - prev > 1) btns.push('<span class="pg-ellipsis">…</span>');
-      btns.push('<button class="pg-btn'+(p===currentPage?' active':'')+'" onclick="('+onPageChange.toString('+)('+p+')">'+ p +'</button>');
-      prev = p;
-    });
-    return btns.join("");
+  container.innerHTML = "";
+
+  var info = document.createElement("div");
+  info.className = "pagination-info";
+  info.innerHTML = 'Showing <span>'+from+'\u2013'+to+'</span> of <span>'+totalRows+'</span> rows';
+  container.appendChild(info);
+
+  var btnWrap = document.createElement("div");
+  btnWrap.className = "pagination-btns";
+
+  function mkBtn(label, page, opts){
+    opts = opts || {};
+    var b = document.createElement("button");
+    b.className = "pg-btn" + (opts.active ? " active" : "");
+    b.innerHTML = label;
+    if (opts.disabled) b.disabled = true;
+    else b.addEventListener("click", function(){ onPageChange(page); });
+    return b;
   }
 
-  container.innerHTML =
-    '<div class="pagination-info">Showing <span>'+ from +'–'+ to +'</span> of <span>'+ totalRows +'</span> rows</div>' +
-    '<div class="pagination-btns">' +
-      '<button class="pg-btn" onclick="('+onPageChange.toString(')('+( currentPage-1)+')"'+(currentPage<=1?' disabled':'')+'>&#8592;</button>' +
-      pageButtons() +
-      '<button class="pg-btn" onclick="('+onPageChange.toString(')('+( currentPage+1)+')"'+(currentPage>=totalPages?' disabled':'')+'>&#8594;</button>' +
-    '</div>';
+  btnWrap.appendChild(mkBtn("\u2190", currentPage - 1, { disabled: currentPage <= 1 }));
+
+  var prev = 0;
+  pages.forEach(function(p){
+    if (prev && p - prev > 1) {
+      var el = document.createElement("span");
+      el.className = "pg-ellipsis";
+      el.textContent = "\u2026";
+      btnWrap.appendChild(el);
+    }
+    btnWrap.appendChild(mkBtn(String(p), p, { active: p === currentPage }));
+    prev = p;
+  });
+
+  btnWrap.appendChild(mkBtn("\u2192", currentPage + 1, { disabled: currentPage >= totalPages }));
+
+  container.appendChild(btnWrap);
 }
 
 // ============================================================
