@@ -167,6 +167,33 @@ th.sort-desc .sort-arrow::after { content:" ▼"; opacity:1; }
 .spin { animation:spin 0.8s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
 
+/* PAGINATION */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--white);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.pagination-info { font-size: 12px; color: var(--muted); }
+.pagination-info span { font-weight: 700; color: var(--text-2); }
+.pagination-btns { display: flex; align-items: center; gap: 4px; }
+.pg-btn {
+  min-width: 32px; height: 32px; padding: 0 8px;
+  border: 1px solid var(--border-2); border-radius: 6px;
+  background: var(--white); color: var(--text-2);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: all 0.15s; font-family: var(--font);
+  display: flex; align-items: center; justify-content: center;
+}
+.pg-btn:hover:not(:disabled) { border-color:var(--red); color:var(--red); background:var(--red-light); }
+.pg-btn.active { background:var(--grad); border-color:transparent; color:#fff; }
+.pg-btn:disabled { opacity:0.35; cursor:not-allowed; }
+.pg-ellipsis { font-size:12px; color:var(--muted); padding:0 4px; }
+
 /* COMMISSION */
 .send-btn { padding:6px 12px; background:var(--grad); color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:600; white-space:nowrap; transition:filter 0.15s; }
 .send-btn:hover { filter:brightness(1.06); }
@@ -214,7 +241,7 @@ th.sort-desc .sort-arrow::after { content:" ▼"; opacity:1; }
   </div>
 </div>
 
-<!-- PARTNER VIEW (KOL / Homeless) -->
+<!-- PARTNER VIEW -->
 <div id="partner-view">
   <div class="topbar">
     <div class="topbar-left">
@@ -387,6 +414,7 @@ th.sort-desc .sort-arrow::after { content:" ▼"; opacity:1; }
         </div>
       </div>
       <div class="table-scroll" id="tbl-body"><div class="loading-row">Loading data...</div></div>
+      <div class="pagination-bar" id="tbl-pagination" style="display:none;"></div>
     </div>
 
     <div class="section-label">KOL &amp; Homeless</div>
@@ -397,9 +425,10 @@ th.sort-desc .sort-arrow::after { content:" ▼"; opacity:1; }
           <span class="table-count" id="comm-count">—</span>
           <span class="muted" id="comm-rate-note"></span>
         </div>
-        <input class="t-search no-pdf" type="text" id="comm-search" placeholder="Search nama / kode..." oninput="renderCommission()">
+        <input class="t-search no-pdf" type="text" id="comm-search" placeholder="Search nama / kode..." oninput="resetCommPage()">
       </div>
       <div class="table-scroll" id="comm-body"><div class="loading-row">Loading...</div></div>
+      <div class="pagination-bar" id="comm-pagination" style="display:none;"></div>
     </div>
   </div>
 </div>
@@ -416,6 +445,7 @@ var CFG = {
   TARGET_P       : 5000000,
   TARGET_R       : 500000000000,
   REFRESH_MIN    : 15,
+  PAGE_SIZE      : 10,
   SHEETS: [
     { name: "Homeless", tab: "Homeless" },
     { name: "KOL",      tab: "KOL"      },
@@ -425,7 +455,7 @@ var CFG = {
   DETAIL_COLS: [
     { key:"wilayah",          label:"Region",        type:"text"    },
     { key:"_source",          label:"Channel",       type:"channel" },
-    { key:"referral_code",    label:"Unique Code",      type:"code"    },
+    { key:"referral_code",    label:"Unique Code",   type:"code"    },
     { key:"link",             label:"Link Post",     type:"linkbtn", btn:"Buka" },
     { key:"media_name",       label:"Media Name",    type:"text"    },
     { key:"jumlah_pendaftar", label:"Registrations", type:"num"     },
@@ -450,6 +480,10 @@ function sheetNameMap(){ var nm={}; CFG.SHEETS.forEach(function(x){ nm[x.tab]=x.
 
 var currentRole="", currentCode="", refreshTimer=null;
 var allData=[], commission=[], commByCode={}, trendChart=null, donutChart=null;
+
+// Pagination state
+var tblPage=1, commPage=1;
+var tblDataSorted=[], commDataFiltered=[];
 
 window.addEventListener("load", function(){
   document.getElementById("login-logo").src=CFG.LOGO_URL;
@@ -561,6 +595,7 @@ function normDateISO(v){
 
 function clearDates(){ document.getElementById("date-from").value=""; document.getElementById("date-to").value=""; applyAll(); }
 function applyAll(){
+  tblPage=1;
   var d=getFilteredData();
   renderKPI(d); renderTrend(d);
   renderRank("rank-channel","_source",true,d);
@@ -692,6 +727,50 @@ function renderConversionTable(d){
 }
 function dash(){ return '<span style="color:var(--muted)">—</span>'; }
 
+// ============================================================
+//  PAGINATION HELPER
+// ============================================================
+function buildPagination(containerId, currentPage, totalRows, pageSize, onPageChange) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var totalPages = Math.ceil(totalRows / pageSize);
+  if (totalPages <= 1) { container.style.display = "none"; return; }
+  container.style.display = "flex";
+
+  var from = (currentPage - 1) * pageSize + 1;
+  var to   = Math.min(currentPage * pageSize, totalRows);
+
+  function pageButtons() {
+    var btns = [];
+    var delta = 2;
+    var range = [];
+    for (var i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) {
+      range.push(i);
+    }
+    var pages = [1].concat(range).concat(totalPages > 1 ? [totalPages] : []);
+    pages = pages.filter(function(v,i,a){ return a.indexOf(v)===i; }).sort(function(a,b){return a-b;});
+
+    var prev = 0;
+    pages.forEach(function(p) {
+      if (prev && p - prev > 1) btns.push('<span class="pg-ellipsis">…</span>');
+      btns.push('<button class="pg-btn'+(p===currentPage?' active':'')+'" onclick="('+onPageChange.toString('+)('+p+')">'+ p +'</button>');
+      prev = p;
+    });
+    return btns.join("");
+  }
+
+  container.innerHTML =
+    '<div class="pagination-info">Showing <span>'+ from +'–'+ to +'</span> of <span>'+ totalRows +'</span> rows</div>' +
+    '<div class="pagination-btns">' +
+      '<button class="pg-btn" onclick="('+onPageChange.toString(')('+( currentPage-1)+')"'+(currentPage<=1?' disabled':'')+'>&#8592;</button>' +
+      pageButtons() +
+      '<button class="pg-btn" onclick="('+onPageChange.toString(')('+( currentPage+1)+')"'+(currentPage>=totalPages?' disabled':'')+'>&#8594;</button>' +
+    '</div>';
+}
+
+// ============================================================
+//  DETAIL TABLE with pagination
+// ============================================================
 var sortCol="jumlah_pendaftar", sortDir="desc";
 function colType(cols,key){ for(var i=0;i<cols.length;i++) if(cols[i].key===key) return cols[i].type; return "text"; }
 function cellHtml(col,r){
@@ -715,25 +794,80 @@ function buildTable(rows,cols,sortable){
   rows.forEach(function(r){ html+='<tr>'; cols.forEach(function(col){ html+=cellHtml(col,r); }); html+='</tr>'; });
   return html+'</tbody></table>';
 }
+
 function renderTable(d){
-  document.getElementById("tbl-count").textContent=fmtNum(d.length)+" rows";
-  if(!d.length){ document.getElementById("tbl-body").innerHTML='<div class="empty-state"><div class="empty-icon">&#128202;</div><div>No matching data</div></div>'; return; }
-  var cols=CFG.DETAIL_COLS;
-  var isNumType=function(k){ var t=colType(cols,k); return t==="num"||t==="rp"; };
-  var sorted=d.slice().sort(function(a,b){ var n=isNumType(sortCol); var av=n?num(a[sortCol]):String(a[sortCol]||"").toLowerCase(); var bv=n?num(b[sortCol]):String(b[sortCol]||"").toLowerCase(); if(av<bv) return sortDir==="asc"?-1:1; if(av>bv) return sortDir==="asc"?1:-1; return 0; });
-  document.getElementById("tbl-body").innerHTML=buildTable(sorted,cols,true);
+  var cols = CFG.DETAIL_COLS;
+  var isNumType = function(k){ var t=colType(cols,k); return t==="num"||t==="rp"; };
+  tblDataSorted = d.slice().sort(function(a,b){
+    var n=isNumType(sortCol);
+    var av=n?num(a[sortCol]):String(a[sortCol]||"").toLowerCase();
+    var bv=n?num(b[sortCol]):String(b[sortCol]||"").toLowerCase();
+    if(av<bv) return sortDir==="asc"?-1:1;
+    if(av>bv) return sortDir==="asc"?1:-1;
+    return 0;
+  });
+  document.getElementById("tbl-count").textContent = fmtNum(tblDataSorted.length) + " rows";
+  if(!tblDataSorted.length){
+    document.getElementById("tbl-body").innerHTML='<div class="empty-state"><div class="empty-icon">&#128202;</div><div>No matching data</div></div>';
+    document.getElementById("tbl-pagination").style.display="none";
+    return;
+  }
+  renderTablePage();
 }
-function doSort(col){ if(sortCol===col) sortDir=sortDir==="asc"?"desc":"asc"; else { sortCol=col; sortDir="desc"; } renderTable(getFilteredData()); }
+
+function renderTablePage(){
+  var ps   = CFG.PAGE_SIZE;
+  var from = (tblPage - 1) * ps;
+  var to   = Math.min(tblPage * ps, tblDataSorted.length);
+  document.getElementById("tbl-body").innerHTML = buildTable(tblDataSorted.slice(from, to), CFG.DETAIL_COLS, true);
+  buildPagination("tbl-pagination", tblPage, tblDataSorted.length, ps, function(p){
+    tblPage = p; renderTablePage();
+    document.getElementById("tbl-body").scrollIntoView({behavior:"smooth", block:"nearest"});
+  });
+}
+
+function doSort(col){
+  if(sortCol===col) sortDir=sortDir==="asc"?"desc":"asc";
+  else { sortCol=col; sortDir="desc"; }
+  tblPage=1;
+  renderTable(getFilteredData());
+}
+
+// ============================================================
+//  COMMISSION TABLE with pagination
+// ============================================================
+function resetCommPage(){ commPage=1; renderCommission(); }
 
 function renderCommission(){
   var note=document.getElementById("comm-rate-note"); if(note) note.textContent="Rp"+Number(CFG.COMMISSION_PER).toLocaleString("id-ID")+" / pendaftar";
   var q=(document.getElementById("comm-search")||{}).value; q=(q||"").toLowerCase();
-  var rows=commission.filter(function(c){ return !q || String(c.name||"").toLowerCase().includes(q) || String(c.referral_code||"").toLowerCase().includes(q); });
-  document.getElementById("comm-count").textContent=fmtNum(rows.length)+" mitra";
-  if(!commission.length){ document.getElementById("comm-body").innerHTML='<div class="empty-state"><div class="empty-icon">&#128176;</div><div>Belum ada data.</div></div>'; return; }
-  if(!rows.length){ document.getElementById("comm-body").innerHTML='<div class="empty-state"><div>Tidak ada yang cocok.</div></div>'; return; }
-  rows.sort(function(a,b){ return num(b.commission)-num(a.commission); });
-  document.getElementById("comm-body").innerHTML=buildTable(rows,CFG.COMMISSION_COLS,false);
+  commDataFiltered = commission.filter(function(c){
+    return !q || String(c.name||"").toLowerCase().includes(q) || String(c.referral_code||"").toLowerCase().includes(q);
+  });
+  document.getElementById("comm-count").textContent = fmtNum(commDataFiltered.length) + " mitra";
+  if(!commission.length){
+    document.getElementById("comm-body").innerHTML='<div class="empty-state"><div class="empty-icon">&#128176;</div><div>Belum ada data.</div></div>';
+    document.getElementById("comm-pagination").style.display="none";
+    return;
+  }
+  if(!commDataFiltered.length){
+    document.getElementById("comm-body").innerHTML='<div class="empty-state"><div>Tidak ada yang cocok.</div></div>';
+    document.getElementById("comm-pagination").style.display="none";
+    return;
+  }
+  commDataFiltered.sort(function(a,b){ return num(b.commission)-num(a.commission); });
+  renderCommPage();
+}
+
+function renderCommPage(){
+  var ps   = CFG.PAGE_SIZE;
+  var from = (commPage - 1) * ps;
+  var to   = Math.min(commPage * ps, commDataFiltered.length);
+  document.getElementById("comm-body").innerHTML = buildTable(commDataFiltered.slice(from, to), CFG.COMMISSION_COLS, false);
+  buildPagination("comm-pagination", commPage, commDataFiltered.length, ps, function(p){
+    commPage = p; renderCommPage();
+    document.getElementById("comm-body").scrollIntoView({behavior:"smooth", block:"nearest"});
+  });
 }
 
 function renderPartner(){
