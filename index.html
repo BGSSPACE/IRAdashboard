@@ -585,33 +585,40 @@ function val(id){ var el=document.getElementById(id); return el?el.value.toLower
 function raw(id){ var el=document.getElementById(id); return el?el.value:""; }
 
 // ============================================================
-//  DATE HELPERS — reads DD/MM/YYYY from sheet, outputs YYYY-MM-DD
+//  DATE HELPERS — handles DD/MM/YY, DD/MM/YYYY, YYYY-MM-DD
 // ============================================================
-function normDateISO(v){
+function parseSheetDate(v){
+  // Returns a JS Date or null
   var s=String(v||"").trim();
-  // DD/MM/YYYY  ← sheet format
-  var m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(m) return m[3]+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0");
-  // YYYY-MM-DD  ← already ISO, pass through
-  var m2=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if(m2) return s;
-  return "";
+  if(!s) return null;
+  // DD/MM/YY  ← actual sheet format e.g. '31/05/26'
+  var m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+  if(m){
+    var yr=2000+Number(m[3]); // assume 20xx
+    return new Date(yr, Number(m[2])-1, Number(m[1]));
+  }
+  // DD/MM/YYYY
+  var m2=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m2) return new Date(Number(m2[3]), Number(m2[2])-1, Number(m2[1]));
+  // YYYY-MM-DD
+  var m3=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m3) return new Date(Number(m3[1]), Number(m3[2])-1, Number(m3[3]));
+  return null;
+}
+
+function normDateISO(v){
+  var d=parseSheetDate(v);
+  if(!d||isNaN(d.getTime())) return "";
+  var yyyy=d.getFullYear();
+  var mm=String(d.getMonth()+1).padStart(2,"0");
+  var dd=String(d.getDate()).padStart(2,"0");
+  return yyyy+"-"+mm+"-"+dd;
 }
 
 function weekKey(v){
   if(!v) return null;
-  var s=String(v).trim();
-  var d;
-  // DD/MM/YYYY  ← sheet format: group1=DD, group2=MM, group3=YYYY
-  var m1=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(m1) d=new Date(Number(m1[3]),Number(m1[2])-1,Number(m1[1]));
-  else {
-    // YYYY-MM-DD
-    var m2=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if(m2) d=new Date(Number(m2[1]),Number(m2[2])-1,Number(m2[3]));
-    else return null;
-  }
-  if(isNaN(d.getTime())) return null;
+  var d=parseSheetDate(v);
+  if(!d||isNaN(d.getTime())) return null;
   var day=d.getDay();
   var offset=day>=5 ? day-5 : day+2;
   var fri=new Date(d.getTime()-offset*86400000);
