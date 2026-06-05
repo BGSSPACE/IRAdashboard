@@ -584,47 +584,29 @@ function getFilteredData(){
 function val(id){ var el=document.getElementById(id); return el?el.value.toLowerCase():""; }
 function raw(id){ var el=document.getElementById(id); return el?el.value:""; }
 
+// ============================================================
+//  DATE HELPERS — reads DD/MM/YYYY from sheet, outputs YYYY-MM-DD
+// ============================================================
 function normDateISO(v){
   var s=String(v||"").trim();
+  // DD/MM/YYYY  ← sheet format
   var m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if(m) return m[3]+"-"+m[2].padStart(2,"0")+"-"+m[1].padStart(2,"0");
+  // YYYY-MM-DD  ← already ISO, pass through
   var m2=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if(m2) return s;
   return "";
 }
 
-function clearDates(){ document.getElementById("date-from").value=""; document.getElementById("date-to").value=""; applyAll(); }
-function applyAll(){
-  tblPage=1;
-  var d=getFilteredData();
-  renderKPI(d); renderTrend(d);
-  renderRank("rank-channel","_source",true,d);
-  renderDonut(d);
-  renderConversionTable(d);
-  renderRank("rank-region","wilayah",false,d);
-  renderRank("rank-media","media_name",false,d);
-  renderTable(d);
-}
-
-function renderKPI(d){
-  var tp=0,tr=0,tc=0; d.forEach(function(r){ tp+=num(r.jumlah_pendaftar); tr+=num(r.total_pendapatan); tc+=num(r.cost); });
-  var pctP=CFG.TARGET_P?Math.min(Math.round(tp/CFG.TARGET_P*100),100):0;
-  var pctR=CFG.TARGET_R?Math.min(Math.round(tr/CFG.TARGET_R*100),100):0;
-  var cpa=tp?Math.round(tc/tp):0;
-  set("k-total",fmtNum(tp)); set("k-target-p",fmtNum(CFG.TARGET_P)); set("k-total-pct",pctP+"%"); bar("k-total-bar",pctP);
-  set("k-rev",fmtRp(tr)); set("k-target-r",CFG.TARGET_R?fmtRp(CFG.TARGET_R):"—"); set("k-rev-pct",pctR+"%"); bar("k-rev-bar",pctR);
-  set("k-cost",fmtRp(tc)); set("k-cpa",fmtRp(cpa));
-}
-function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
-function bar(id,p){ var el=document.getElementById(id); if(el) el.style.width=p+"%"; }
-
 function weekKey(v){
   if(!v) return null;
   var s=String(v).trim();
   var d;
+  // DD/MM/YYYY  ← sheet format: group1=DD, group2=MM, group3=YYYY
   var m1=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if(m1) d=new Date(Number(m1[3]),Number(m1[2])-1,Number(m1[1]));
   else {
+    // YYYY-MM-DD
     var m2=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if(m2) d=new Date(Number(m2[1]),Number(m2[2])-1,Number(m2[3]));
     else return null;
@@ -652,6 +634,31 @@ function weekLabel(fridayStr){
     return fdStr+" "+MN[fri.getMonth()]+"\u2013"+tdStr+" "+MN[thu.getMonth()];
   }
 }
+
+function clearDates(){ document.getElementById("date-from").value=""; document.getElementById("date-to").value=""; applyAll(); }
+function applyAll(){
+  tblPage=1;
+  var d=getFilteredData();
+  renderKPI(d); renderTrend(d);
+  renderRank("rank-channel","_source",true,d);
+  renderDonut(d);
+  renderConversionTable(d);
+  renderRank("rank-region","wilayah",false,d);
+  renderRank("rank-media","media_name",false,d);
+  renderTable(d);
+}
+
+function renderKPI(d){
+  var tp=0,tr=0,tc=0; d.forEach(function(r){ tp+=num(r.jumlah_pendaftar); tr+=num(r.total_pendapatan); tc+=num(r.cost); });
+  var pctP=CFG.TARGET_P?Math.min(Math.round(tp/CFG.TARGET_P*100),100):0;
+  var pctR=CFG.TARGET_R?Math.min(Math.round(tr/CFG.TARGET_R*100),100):0;
+  var cpa=tp?Math.round(tc/tp):0;
+  set("k-total",fmtNum(tp)); set("k-target-p",fmtNum(CFG.TARGET_P)); set("k-total-pct",pctP+"%"); bar("k-total-bar",pctP);
+  set("k-rev",fmtRp(tr)); set("k-target-r",CFG.TARGET_R?fmtRp(CFG.TARGET_R):"—"); set("k-rev-pct",pctR+"%"); bar("k-rev-bar",pctR);
+  set("k-cost",fmtRp(tc)); set("k-cpa",fmtRp(cpa));
+}
+function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
+function bar(id,p){ var el=document.getElementById(id); if(el) el.style.width=p+"%"; }
 
 function renderTrend(d){
   var bm={};
@@ -728,7 +735,7 @@ function renderConversionTable(d){
 function dash(){ return '<span style="color:var(--muted)">—</span>'; }
 
 // ============================================================
-//  PAGINATION HELPER  (FIXED)
+//  PAGINATION HELPER
 // ============================================================
 function buildPagination(containerId, currentPage, totalRows, pageSize, onPageChange) {
   var container = document.getElementById(containerId);
