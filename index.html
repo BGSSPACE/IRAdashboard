@@ -453,6 +453,7 @@ var CFG = {
     { name: "TikTok",   tab: "TikTok"  }
   ],
   DETAIL_COLS: [
+    { key:"date",             label:"Date",          type:"date"    },
     { key:"wilayah",          label:"Region",        type:"text"    },
     { key:"_source",          label:"Channel",       type:"channel" },
     { key:"referral_code",    label:"Unique Code",   type:"code"    },
@@ -829,7 +830,13 @@ function buildTable(rows,cols,sortable){
 function renderTable(d){
   var cols = CFG.DETAIL_COLS;
   var isNumType = function(k){ var t=colType(cols,k); return t==="num"||t==="rp"; };
+  var isDateType = function(k){ return colType(cols,k)==="date"; };
   tblDataSorted = d.slice().sort(function(a,b){
+    if(isDateType(sortCol)){
+      var ad=parseSheetDate(a[sortCol]), bd=parseSheetDate(b[sortCol]);
+      var at=ad?ad.getTime():0, bt=bd?bd.getTime():0;
+      return sortDir==="asc"?at-bt:bt-at;
+    }
     var n=isNumType(sortCol);
     var av=n?num(a[sortCol]):String(a[sortCol]||"").toLowerCase();
     var bv=n?num(b[sortCol]):String(b[sortCol]||"").toLowerCase();
@@ -918,7 +925,13 @@ function groupBy(d,key,valKey){ var o={}; d.forEach(function(r){ var k=r[key]||"
 function num(v){ if(typeof v==="number") return v; var n=parseFloat(String(v||"").replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; }
 function fmtNum(n){ return Math.round(num(n)).toLocaleString("en-US"); }
 function fmtRp(n){ var v=Math.round(num(n)); if(v>=1e12) return "Rp "+(v/1e12).toFixed(1)+"T"; if(v>=1e9) return "Rp "+(v/1e9).toFixed(1)+"M"; if(v>=1e6) return "Rp "+(v/1e6).toFixed(1)+"jt"; return "Rp "+v.toLocaleString("en-US"); }
-function fmtDate(v){ return String(v||"—"); }
+function fmtDate(v){
+  var d=parseSheetDate(v);
+  if(!d||isNaN(d.getTime())) return String(v||"—");
+  var dd=String(d.getDate()).padStart(2,"0");
+  var mm=String(d.getMonth()+1).padStart(2,"0");
+  return dd+"/"+mm+"/"+d.getFullYear();
+}
 function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 var toastTimer=null;
 function toast(msg){ var t=document.getElementById("toast"); t.textContent=msg; t.classList.add("on"); if(toastTimer) clearTimeout(toastTimer); toastTimer=setTimeout(function(){ t.classList.remove("on"); },3500); }
