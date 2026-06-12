@@ -275,6 +275,7 @@ th.sort-desc .sort-arrow::after { content:" ▼"; opacity:1; }
 
     <div class="section-label">Key performance indicators</div>
     <div class="kpi-grid">
+      <!-- Card 1: Total Registrations (dari Database/filter) -->
       <div class="kpi-card accent">
         <div class="kpi-lbl">Total Registrations</div>
         <div class="kpi-val" id="k-total">—</div>
@@ -284,20 +285,19 @@ th.sort-desc .sort-arrow::after { content:" ▼"; opacity:1; }
           <div class="kpi-progress-label"><span class="kpi-pct" id="k-total-pct">0%</span><span class="kpi-tgt">achieved</span></div>
         </div>
       </div>
+      <!-- Card 2: Total Registrasi (dari sheet Registrasi, tidak terpengaruh filter) -->
       <div class="kpi-card">
-        <div class="kpi-lbl">Total Revenue</div>
-        <div class="kpi-val" id="k-rev">—</div>
-        <div class="kpi-sub">of target <span id="k-target-r">—</span></div>
-        <div class="kpi-progress">
-          <div class="kpi-progress-track"><div class="kpi-progress-fill" id="k-rev-bar" style="width:0%"></div></div>
-          <div class="kpi-progress-label"><span class="kpi-pct" id="k-rev-pct">0%</span><span class="kpi-tgt">achieved</span></div>
-        </div>
+        <div class="kpi-lbl">Total Registrasi</div>
+        <div class="kpi-val" id="k-treg">—</div>
+        <div class="kpi-sub">akumulasi dari sheet Registrasi</div>
       </div>
+      <!-- Card 3: Total Spending -->
       <div class="kpi-card">
         <div class="kpi-lbl">Total Spending</div>
         <div class="kpi-val" id="k-cost">—</div>
         <div class="kpi-sub">accumulated spend, all channels</div>
       </div>
+      <!-- Card 4: Cost per Acquisition -->
       <div class="kpi-card">
         <div class="kpi-lbl">Cost per Acquisition</div>
         <div class="kpi-val" id="k-cpa">—</div>
@@ -395,7 +395,6 @@ var CFG = {
   GFORM_URL      : "https://docs.google.com/forms/d/e/1FAIpQLSdAJ_3H87EEsyLlV5UBWv1MTMHxZ5JilhtqW-HwRYNYvsg5zA/viewform",
   COMMISSION_PER : 30000,
   TARGET_P       : 5000000,
-  TARGET_R       : 500000000000,
   REFRESH_MIN    : 15,
   PAGE_SIZE      : 10,
   SHEETS: [
@@ -431,6 +430,8 @@ var CH_COLORS = { homeless:"#C2410C", kol:"#B5160F", meta:"#1D4ED8", tiktok:"#BE
 function chColor(name){ var k=(name||"").toLowerCase().replace(/\s+/g,"").replace(/ads/,""); return CH_COLORS[k]||CH_COLORS.default; }
 function sheetNameMap(){ var nm={}; CFG.SHEETS.forEach(function(x){ nm[x.tab]=x.name; }); return nm; }
 
+// ── Global state ──────────────────────────────────────────────
+var totalRegistrasiGlobal = 0;
 var currentRole="", currentCode="", refreshTimer=null;
 var allData=[], commission=[], commByCode={}, trendChart=null, donutChart=null;
 var tblPage=1, commPage=1;
@@ -480,6 +481,7 @@ document.addEventListener("keydown",function(e){ if(e.key!=="Enter") return; var
 function startAutoRefresh(){ stopAutoRefresh(); refreshTimer=setInterval(function(){ fetchData(false); },CFG.REFRESH_MIN*60*1000); }
 function stopAutoRefresh(){ if(refreshTimer){ clearInterval(refreshTimer); refreshTimer=null; } }
 function loadAllData(manual){ fetchData(manual); }
+
 function fetchData(manual){
   if(manual){ var ic=document.getElementById("refresh-icon"); if(ic) ic.classList.add("spin"); }
   fetch(CFG.SCRIPT_URL)
@@ -487,6 +489,8 @@ function fetchData(manual){
     .then(function(json){
       allData=json.data||[];
       commission=json.commission||[];
+      // ── Ambil totalRegistrasi dari sheet Registrasi ──
+      totalRegistrasiGlobal=json.totalRegistrasi||0;
       commByCode={};
       commission.forEach(function(c){ if(c.referral_code) commByCode[String(c.referral_code).trim()]=c; });
       var stamp=json.lastUpdate?("Database last updated: "+json.lastUpdate):("Fetched: "+new Date().toLocaleString("en-GB",{day:"2-digit",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"}));
@@ -529,17 +533,11 @@ function getFilteredData(){
 function val(id){ var el=document.getElementById(id); return el?el.value.toLowerCase():""; }
 function raw(id){ var el=document.getElementById(id); return el?el.value:""; }
 
-// ============================================================
-//  DATE HELPERS — FIXED
-//  Handles DD/MM/YY, DD/MM/YYYY, YYYY-MM-DD with range guard
-//  so invalid parses (e.g. month=31) return null instead of
-//  silently rolling over to a wrong date.
-// ============================================================
+// ── Date helpers ──────────────────────────────────────────────
 function parseSheetDate(v) {
   var s = String(v || "").trim();
   if (!s) return null;
 
-  // DD/MM/YY  e.g. '31/05/26'
   var m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
   if (m1) {
     var d = Number(m1[1]), mo = Number(m1[2]), yr = 2000 + Number(m1[3]);
@@ -548,7 +546,6 @@ function parseSheetDate(v) {
     return null;
   }
 
-  // DD/MM/YYYY  e.g. '31/05/2025'
   var m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (m2) {
     var d = Number(m2[1]), mo = Number(m2[2]), yr = Number(m2[3]);
@@ -557,7 +554,6 @@ function parseSheetDate(v) {
     return null;
   }
 
-  // YYYY-MM-DD  e.g. '2025-05-31'
   var m3 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m3) return new Date(Number(m3[1]), Number(m3[2]) - 1, Number(m3[3]));
 
@@ -572,9 +568,6 @@ function normDateISO(v) {
     String(d.getDate()).padStart(2, "0");
 }
 
-// Returns 'YYYY-MM-DD' of the Friday anchoring the Fri-Thu week.
-// getDay(): 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat
-// (day+2)%7 maps: Fri->0, Sat->1, Sun->2, Mon->3, Tue->4, Wed->5, Thu->6
 function weekKey(v) {
   if (!v) return null;
   var d = parseSheetDate(v);
@@ -586,7 +579,6 @@ function weekKey(v) {
     String(fri.getDate()).padStart(2, "0");
 }
 
-// "30 May – 5 Jun"  or  "23–29 May"
 function weekLabel(fridayStr) {
   var p = fridayStr.split("-");
   var fri = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
@@ -604,7 +596,6 @@ function fmtDate(v) {
          String(d.getMonth() + 1).padStart(2, "0") + "/" +
          d.getFullYear();
 }
-// ============================================================
 
 function clearDates(){ document.getElementById("date-from").value=""; document.getElementById("date-to").value=""; applyAll(); }
 function applyAll(){
@@ -620,14 +611,22 @@ function applyAll(){
 }
 
 function renderKPI(d){
-  var tp=0,tr=0,tc=0;
-  d.forEach(function(r){ tp+=num(r.jumlah_pendaftar); tr+=num(r.total_pendapatan); tc+=num(r.cost); });
+  // k-total: dari data yang terfilter (Database sheet)
+  var tp=0,tc=0;
+  d.forEach(function(r){ tp+=num(r.jumlah_pendaftar); tc+=num(r.cost); });
   var pctP=CFG.TARGET_P?Math.min(Math.round(tp/CFG.TARGET_P*100),100):0;
-  var pctR=CFG.TARGET_R?Math.min(Math.round(tr/CFG.TARGET_R*100),100):0;
   var cpa=tp?Math.round(tc/tp):0;
-  set("k-total",fmtNum(tp)); set("k-target-p",fmtNum(CFG.TARGET_P)); set("k-total-pct",pctP+"%"); bar("k-total-bar",pctP);
-  set("k-rev",fmtRp(tr)); set("k-target-r",CFG.TARGET_R?fmtRp(CFG.TARGET_R):"—"); set("k-rev-pct",pctR+"%"); bar("k-rev-bar",pctR);
-  set("k-cost",fmtRp(tc)); set("k-cpa",fmtRp(cpa));
+
+  set("k-total",fmtNum(tp));
+  set("k-target-p",fmtNum(CFG.TARGET_P));
+  set("k-total-pct",pctP+"%");
+  bar("k-total-bar",pctP);
+
+  // k-treg: dari sheet Registrasi (global, tidak terpengaruh filter)
+  set("k-treg", fmtNum(totalRegistrasiGlobal));
+
+  set("k-cost",fmtRp(tc));
+  set("k-cpa",fmtRp(cpa));
 }
 function set(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; }
 function bar(id,p){ var el=document.getElementById(id); if(el) el.style.width=p+"%"; }
@@ -724,9 +723,7 @@ function renderConversionTable(d){
 }
 function dash(){ return '<span style="color:var(--muted)">—</span>'; }
 
-// ============================================================
-//  PAGINATION
-// ============================================================
+// ── Pagination ────────────────────────────────────────────────
 function buildPagination(containerId, currentPage, totalRows, pageSize, onPageChange) {
   var container=document.getElementById(containerId);
   if(!container) return;
@@ -774,9 +771,7 @@ function buildPagination(containerId, currentPage, totalRows, pageSize, onPageCh
   container.appendChild(btnWrap);
 }
 
-// ============================================================
-//  DETAIL TABLE
-// ============================================================
+// ── Detail table ──────────────────────────────────────────────
 var sortCol="jumlah_pendaftar", sortDir="desc";
 function colType(cols,key){ for(var i=0;i<cols.length;i++) if(cols[i].key===key) return cols[i].type; return "text"; }
 function cellHtml(col,r){
@@ -844,9 +839,7 @@ function doSort(col){
   tblPage=1; renderTable(getFilteredData());
 }
 
-// ============================================================
-//  COMMISSION TABLE
-// ============================================================
+// ── Commission table ──────────────────────────────────────────
 function resetCommPage(){ commPage=1; renderCommission(); }
 
 function renderCommission(){
@@ -893,9 +886,7 @@ function renderPartner(){
   else { link.href="#"; link.style.pointerEvents="none"; link.style.opacity="0.5"; link.textContent="Form belum diatur"; }
 }
 
-// ============================================================
-//  UTILITIES
-// ============================================================
+// ── Utilities ─────────────────────────────────────────────────
 function groupBy(d,key,valKey){ var o={}; d.forEach(function(r){ var k=r[key]||"(none)"; o[k]=(o[k]||0)+num(r[valKey]); }); return Object.entries(o).sort(function(a,b){ return b[1]-a[1]; }); }
 function num(v){ if(typeof v==="number") return v; var n=parseFloat(String(v||"").replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; }
 function fmtNum(n){ return Math.round(num(n)).toLocaleString("en-US"); }
